@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import * as XLSX from "xlsx";
 import { prisma } from "@/lib/prisma";
 import { requireSessionForApi } from "@/lib/auth";
+import { buildScansExcelBuffer } from "@/lib/scan-export";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
@@ -44,27 +44,10 @@ export async function GET(req: NextRequest) {
     orderBy: { scanDate: "desc" },
   });
 
-  const rows = scans.map((s) => ({
-    "Fecha de escaneo": s.scanDate.toLocaleDateString("es-AR", {
-      day: "2-digit",
-      month: "2-digit",
-      year: "numeric",
-    }),
-    "Nombre del informe": s.reportName,
-    "Nombre del empleado": s.employeeName ?? "",
-    "Identificador de empleado": s.employeeId,
-  }));
-
-  const worksheet = XLSX.utils.json_to_sheet(rows);
-  worksheet["!cols"] = [{ wch: 22 }, { wch: 22 }, { wch: 28 }, { wch: 28 }];
-
-  const workbook = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(workbook, worksheet, "Escaneos");
-
-  const buffer = XLSX.write(workbook, { type: "buffer", bookType: "xlsx" });
+  const buffer = buildScansExcelBuffer(scans);
   const filename = `escaneos-${new Date().toISOString().slice(0, 10)}.xlsx`;
 
-  return new NextResponse(buffer, {
+  return new NextResponse(buffer as BodyInit, {
     status: 200,
     headers: {
       "Content-Type":

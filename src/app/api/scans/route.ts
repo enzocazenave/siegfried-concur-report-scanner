@@ -59,6 +59,7 @@ export async function GET(req: NextRequest) {
     reportName: s.reportName,
     employeeName: s.employeeName,
     employeeId: s.employeeId,
+    sentAt: s.sentAt,
     createdAt: s.createdAt,
     username: s.user.username,
   }));

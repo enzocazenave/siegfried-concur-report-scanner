@@ -8,6 +8,7 @@ import {
   Download,
   Loader2,
   Search,
+  Send,
   Trash2,
   X,
 } from "lucide-react";
@@ -41,6 +42,7 @@ type Scan = {
   reportName: string;
   employeeName: string | null;
   employeeId: string;
+  sentAt: string | null;
   username: string;
 };
 
@@ -50,6 +52,12 @@ type Page = {
   page: number;
   pageSize: number;
   totalPages: number;
+};
+
+type Stats = {
+  total: number;
+  sent: number;
+  pending: number;
 };
 
 export function HistoryTable({ isMaster }: { isMaster: boolean }) {
@@ -67,6 +75,9 @@ export function HistoryTable({ isMaster }: { isMaster: boolean }) {
   const [loading, setLoading] = React.useState(true);
   const [deletingId, setDeletingId] = React.useState<number | null>(null);
   const [pendingDelete, setPendingDelete] = React.useState<Scan | null>(null);
+  const [stats, setStats] = React.useState<Stats | null>(null);
+  const [confirmSendOpen, setConfirmSendOpen] = React.useState(false);
+  const [sending, setSending] = React.useState(false);
   const pageSize = 10;
 
   // Build the shared filter query params (used by both the list fetch and
@@ -108,9 +119,24 @@ export function HistoryTable({ isMaster }: { isMaster: boolean }) {
     }
   }, [page, buildFilterParams]);
 
+  // Stats are global (unaffected by filters): scanned / sent / pending.
+  const fetchStats = React.useCallback(async () => {
+    try {
+      const res = await fetch("/api/scans/stats");
+      if (!res.ok) return;
+      setStats((await res.json()) as Stats);
+    } catch {
+      /* non-blocking */
+    }
+  }, []);
+
   React.useEffect(() => {
     fetchPage();
   }, [fetchPage]);
+
+  React.useEffect(() => {
+    fetchStats();
+  }, [fetchStats]);
 
   // Reset page when filters change.
   React.useEffect(() => {
@@ -149,6 +175,7 @@ export function HistoryTable({ isMaster }: { isMaster: boolean }) {
         throw new Error(message);
       }
       toast.success("Escaneo eliminado.");
+      void fetchStats();
       // If we just emptied the current page (except the last), step back one.
       if (data && data.items.length === 1 && page > 1) {
         setPage((p) => p - 1);
@@ -169,6 +196,52 @@ export function HistoryTable({ isMaster }: { isMaster: boolean }) {
     window.location.href = url;
   }
 
+  // "Enviar": marks all pending reports as sent and downloads the Excel with
+  // exactly those reports. Global operation — ignores the on-screen filters.
+  async function confirmSend() {
+    setSending(true);
+    try {
+      const res = await fetch("/api/scans/send", { method: "POST" });
+      if (!res.ok) {
+        let message = "No se pudieron enviar los informes.";
+        try {
+          const body = await res.json();
+          if (typeof body?.error === "string") message = body.error;
+        } catch {
+          /* ignore */
+        }
+        throw new Error(message);
+      }
+
+      const sentCount = Number(res.headers.get("X-Sent-Count") ?? 0);
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      const disposition = res.headers.get("Content-Disposition") ?? "";
+      const match = disposition.match(/filename="(.+?)"/);
+      a.download = match?.[1] ?? "informes-enviados.xlsx";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+
+      toast.success(
+        `${sentCount} ${
+          sentCount === 1 ? "informe enviado" : "informes enviados"
+        }.`
+      );
+      setConfirmSendOpen(false);
+      await Promise.all([fetchPage(), fetchStats()]);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Error desconocido");
+    } finally {
+      setSending(false);
+    }
+  }
+
+  const pendingCount = stats?.pending ?? 0;
+
   const items = data?.items ?? [];
   const totalPages = data?.totalPages ?? 1;
   const total = data?.total ?? 0;
@@ -176,6 +249,31 @@ export function HistoryTable({ isMaster }: { isMaster: boolean }) {
   return (
     <Card>
       <CardContent className="space-y-4 p-4 sm:p-6">
+        <div className="grid gap-3 sm:grid-cols-3">
+          <div className="rounded-md border bg-muted/30 p-3">
+            <div className="text-2xl font-bold tabular-nums">
+              {stats ? stats.total : "—"}
+            </div>
+            <div className="text-xs text-muted-foreground">
+              Informes escaneados
+            </div>
+          </div>
+          <div className="rounded-md border bg-muted/30 p-3">
+            <div className="text-2xl font-bold tabular-nums">
+              {stats ? stats.sent : "—"}
+            </div>
+            <div className="text-xs text-muted-foreground">Enviados</div>
+          </div>
+          <div className="rounded-md border bg-muted/30 p-3">
+            <div className="text-2xl font-bold tabular-nums">
+              {stats ? stats.pending : "—"}
+            </div>
+            <div className="text-xs text-muted-foreground">
+              Pendientes de enviar
+            </div>
+          </div>
+        </div>
+
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           <div className="flex items-stretch">
             <span className="flex select-none items-center rounded-l-md border border-r-0 border-input bg-muted px-3 font-mono text-sm text-muted-foreground">
@@ -273,6 +371,14 @@ export function HistoryTable({ isMaster }: { isMaster: boolean }) {
               <Download className="h-4 w-4" />
               Exportar Excel
             </Button>
+            <Button
+              onClick={() => setConfirmSendOpen(true)}
+              disabled={pendingCount === 0 || sending}
+            >
+              <Send className="h-4 w-4" />
+              Enviar
+              {pendingCount > 0 ? ` (${pendingCount})` : ""}
+            </Button>
           </div>
         </div>
 
@@ -284,6 +390,7 @@ export function HistoryTable({ isMaster }: { isMaster: boolean }) {
                 <TableHead>Nombre del informe</TableHead>
                 <TableHead>Nombre del empleado</TableHead>
                 <TableHead>Identificador de empleado</TableHead>
+                <TableHead>Fecha de envío</TableHead>
                 <TableHead>Usuario</TableHead>
                 <TableHead className="w-12" />
               </TableRow>
@@ -292,7 +399,7 @@ export function HistoryTable({ isMaster }: { isMaster: boolean }) {
               {loading ? (
                 <TableRow>
                   <TableCell
-                    colSpan={6}
+                    colSpan={7}
                     className="h-24 text-center text-muted-foreground"
                   >
                     Cargando…
@@ -301,7 +408,7 @@ export function HistoryTable({ isMaster }: { isMaster: boolean }) {
               ) : items.length === 0 ? (
                 <TableRow>
                   <TableCell
-                    colSpan={6}
+                    colSpan={7}
                     className="h-24 text-center text-muted-foreground"
                   >
                     Sin resultados.
@@ -321,6 +428,15 @@ export function HistoryTable({ isMaster }: { isMaster: boolean }) {
                     </TableCell>
                     <TableCell className="font-mono">
                       {scan.employeeId}
+                    </TableCell>
+                    <TableCell className="font-mono text-xs">
+                      {scan.sentAt ? (
+                        formatDate(scan.sentAt)
+                      ) : (
+                        <span className="text-muted-foreground">
+                          Sin enviar
+                        </span>
+                      )}
                     </TableCell>
                     <TableCell className="font-mono text-xs text-muted-foreground">
                       {scan.username}
@@ -436,6 +552,51 @@ export function HistoryTable({ isMaster }: { isMaster: boolean }) {
                 <>
                   <Trash2 className="h-4 w-4" />
                   Eliminar
+                </>
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog
+        open={confirmSendOpen}
+        onOpenChange={(open) => {
+          // Block closing while a send is in flight.
+          if (!open && sending) return;
+          setConfirmSendOpen(open);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              ¿Estás seguro que querés enviar {pendingCount}{" "}
+              {pendingCount === 1 ? "informe" : "informes"}?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              Se descargará un Excel con los informes pendientes y quedarán
+              marcados con la fecha de envío de hoy.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={sending}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => {
+                e.preventDefault();
+                void confirmSend();
+              }}
+              disabled={sending}
+            >
+              {sending ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Enviando…
+                </>
+              ) : (
+                <>
+                  <Send className="h-4 w-4" />
+                  Enviar
                 </>
               )}
             </AlertDialogAction>

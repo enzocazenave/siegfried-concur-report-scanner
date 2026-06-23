@@ -31,6 +31,9 @@ model Scan {
   reportName   String
   employeeName String?
   employeeId   String
+  // Timestamp del envío. NULL = todavía no enviado. Lo estampa el botón
+  // "Enviar" del historial (POST /api/scans/send) sobre los informes pendientes.
+  sentAt       DateTime?
   createdAt    DateTime @default(now())
 
   userId Int
@@ -40,6 +43,8 @@ model Scan {
   @@index([employeeId])
   @@index([reportName])
   @@index([userId])
+  // Usado por el filtro de pendientes / stats (informes sin enviar).
+  @@index([sentAt])
   // Used by the duplicate-check on POST /api/scans.
   @@index([reportName, employeeId])
 }
