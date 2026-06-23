@@ -1,0 +1,66 @@
+// Prisma schema for the report scanner.
+// Two tables: Scan + User. Every scan belongs to the user who pressed Escanear.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  // Pooled connection (pgBouncer) — la usa la app en runtime serverless.
+  url       = env("DATABASE_URL")
+  // Conexión directa — la usan `prisma db push` / `migrate`, que no van por el pooler.
+  directUrl = env("DATABASE_URL_UNPOOLED")
+}
+
+model User {
+  id           Int      @id @default(autoincrement())
+  username     String   @unique
+  passwordHash String
+  // Exactly one master user exists at any time (bootstrapped from env vars).
+  // Only the master can create/delete other users.
+  isMaster     Boolean  @default(false)
+  createdAt    DateTime @default(now())
+
+  scans Scan[]
+}
+
+model Scan {
+  id           Int      @id @default(autoincrement())
+  scanDate     DateTime @default(now())
+  reportName   String
+  employeeName String?
+  employeeId   String
+  createdAt    DateTime @default(now())
+
+  userId Int
+  user   User @relation(fields: [userId], references: [id])
+
+  @@index([scanDate])
+  @@index([employeeId])
+  @@index([reportName])
+  @@index([userId])
+  // Used by the duplicate-check on POST /api/scans.
+  @@index([reportName, employeeId])
+}
+
+// Rate limiting: track login attempts per IP. Failed attempts inside the
+// window block further attempts; successful login wipes the IP's failures.
+model LoginAttempt {
+  id          Int      @id @default(autoincrement())
+  ipAddress   String
+  success     Boolean
+  attemptedAt DateTime @default(now())
+
+  @@index([ipAddress, attemptedAt])
+}
+
+// Rate limiting / quotas: every call to /api/scan inserts a row here BEFORE
+// touching the Claude API. Both per-minute burst and per-day quota read this.
+model ScanAttempt {
+  id          Int      @id @default(autoincrement())
+  userId      Int
+  attemptedAt DateTime @default(now())
+
+  @@index([userId, attemptedAt])
+}

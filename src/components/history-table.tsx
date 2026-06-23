@@ -1,0 +1,447 @@
+"use client";
+
+import * as React from "react";
+import {
+  CalendarDays,
+  ChevronLeft,
+  ChevronRight,
+  Download,
+  Loader2,
+  Search,
+  Trash2,
+  X,
+} from "lucide-react";
+import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { formatDate } from "@/lib/utils";
+
+type Scan = {
+  id: number;
+  scanDate: string;
+  reportName: string;
+  employeeName: string | null;
+  employeeId: string;
+  username: string;
+};
+
+type Page = {
+  items: Scan[];
+  total: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+};
+
+export function HistoryTable({ isMaster }: { isMaster: boolean }) {
+  // The visible input only holds the SUFFIX. The full search term sent to the
+  // API is always "99000" + suffix (all Siegfried IDs start with that prefix).
+  const EMPLOYEE_ID_PREFIX = "99000";
+  const [employeeIdSuffix, setEmployeeIdSuffix] = React.useState("");
+  const [reportName, setReportName] = React.useState("");
+  const [employeeName, setEmployeeName] = React.useState("");
+  // YYYY-MM-DD as typed in <input type="date">; empty string = unset.
+  const [fromDate, setFromDate] = React.useState("");
+  const [toDate, setToDate] = React.useState("");
+  const [page, setPage] = React.useState(1);
+  const [data, setData] = React.useState<Page | null>(null);
+  const [loading, setLoading] = React.useState(true);
+  const [deletingId, setDeletingId] = React.useState<number | null>(null);
+  const [pendingDelete, setPendingDelete] = React.useState<Scan | null>(null);
+  const pageSize = 10;
+
+  // Build the shared filter query params (used by both the list fetch and
+  // the Excel export so the exported file matches exactly what's on screen).
+  const buildFilterParams = React.useCallback(() => {
+    const params = new URLSearchParams();
+    const suffix = employeeIdSuffix.trim();
+    if (suffix) {
+      // Always prepend the fixed prefix so the filter matches real IDs.
+      params.set("employeeId", `${EMPLOYEE_ID_PREFIX}${suffix}`);
+    }
+    if (reportName.trim()) params.set("reportName", reportName.trim());
+    if (employeeName.trim()) params.set("employeeName", employeeName.trim());
+    if (fromDate) {
+      // Local-TZ start of day.
+      params.set("from", new Date(`${fromDate}T00:00:00`).toISOString());
+    }
+    if (toDate) {
+      // Local-TZ end of day (inclusive).
+      params.set("to", new Date(`${toDate}T23:59:59.999`).toISOString());
+    }
+    return params;
+  }, [employeeIdSuffix, reportName, employeeName, fromDate, toDate]);
+
+  const fetchPage = React.useCallback(async () => {
+    setLoading(true);
+    const params = buildFilterParams();
+    params.set("page", String(page));
+    params.set("pageSize", String(pageSize));
+    try {
+      const res = await fetch(`/api/scans?${params.toString()}`);
+      if (!res.ok) throw new Error("Error al cargar el historial");
+      const json = (await res.json()) as Page;
+      setData(json);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Error desconocido");
+    } finally {
+      setLoading(false);
+    }
+  }, [page, buildFilterParams]);
+
+  React.useEffect(() => {
+    fetchPage();
+  }, [fetchPage]);
+
+  // Reset page when filters change.
+  React.useEffect(() => {
+    setPage(1);
+  }, [employeeIdSuffix, reportName, employeeName, fromDate, toDate]);
+
+  function clearAllFilters() {
+    setEmployeeIdSuffix("");
+    setReportName("");
+    setEmployeeName("");
+    setFromDate("");
+    setToDate("");
+  }
+
+  const hasActiveFilters =
+    !!employeeIdSuffix.trim() ||
+    !!reportName.trim() ||
+    !!employeeName.trim() ||
+    !!fromDate ||
+    !!toDate;
+
+  async function confirmDelete() {
+    const scan = pendingDelete;
+    if (!scan) return;
+    setDeletingId(scan.id);
+    try {
+      const res = await fetch(`/api/scans/${scan.id}`, { method: "DELETE" });
+      if (!res.ok && res.status !== 204) {
+        let message = "No se pudo eliminar el escaneo.";
+        try {
+          const body = await res.json();
+          if (typeof body?.error === "string") message = body.error;
+        } catch {
+          /* ignore */
+        }
+        throw new Error(message);
+      }
+      toast.success("Escaneo eliminado.");
+      // If we just emptied the current page (except the last), step back one.
+      if (data && data.items.length === 1 && page > 1) {
+        setPage((p) => p - 1);
+      } else {
+        await fetchPage();
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Error desconocido");
+    } finally {
+      setDeletingId(null);
+      setPendingDelete(null);
+    }
+  }
+
+  function handleExport() {
+    const params = buildFilterParams();
+    const url = `/api/scans/export${params.toString() ? `?${params}` : ""}`;
+    window.location.href = url;
+  }
+
+  const items = data?.items ?? [];
+  const totalPages = data?.totalPages ?? 1;
+  const total = data?.total ?? 0;
+
+  return (
+    <Card>
+      <CardContent className="space-y-4 p-4 sm:p-6">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="flex items-stretch">
+            <span className="flex select-none items-center rounded-l-md border border-r-0 border-input bg-muted px-3 font-mono text-sm text-muted-foreground">
+              {EMPLOYEE_ID_PREFIX}
+            </span>
+            <Input
+              placeholder="resto del identificador…"
+              value={employeeIdSuffix}
+              inputMode="numeric"
+              pattern="[0-9]*"
+              onChange={(e) =>
+                setEmployeeIdSuffix(e.target.value.replace(/\D/g, ""))
+              }
+              className="rounded-l-none font-mono"
+              aria-label={`Buscar por identificador de empleado (empieza con ${EMPLOYEE_ID_PREFIX})`}
+            />
+          </div>
+          <div className="relative">
+            <Search className="pointer-events-none absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Buscar por nombre del informe…"
+              value={reportName}
+              onChange={(e) => setReportName(e.target.value)}
+              className="pl-8"
+            />
+          </div>
+          <div className="relative">
+            <Search className="pointer-events-none absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Buscar por nombre del empleado…"
+              value={employeeName}
+              onChange={(e) => setEmployeeName(e.target.value)}
+              className="pl-8"
+            />
+          </div>
+        </div>
+
+        <div className="flex flex-wrap items-end gap-3">
+          <div className="flex flex-col gap-1">
+            <label
+              htmlFor="from-date"
+              className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground"
+            >
+              <CalendarDays className="h-3.5 w-3.5" />
+              Desde
+            </label>
+            <Input
+              id="from-date"
+              type="date"
+              value={fromDate}
+              max={toDate || undefined}
+              onChange={(e) => setFromDate(e.target.value)}
+              className="w-[170px]"
+            />
+          </div>
+          <div className="flex flex-col gap-1">
+            <label
+              htmlFor="to-date"
+              className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground"
+            >
+              <CalendarDays className="h-3.5 w-3.5" />
+              Hasta
+            </label>
+            <Input
+              id="to-date"
+              type="date"
+              value={toDate}
+              min={fromDate || undefined}
+              onChange={(e) => setToDate(e.target.value)}
+              className="w-[170px]"
+            />
+          </div>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => {
+              const today = new Date();
+              const ymd = `${today.getFullYear()}-${String(
+                today.getMonth() + 1
+              ).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+              setFromDate(ymd);
+              setToDate(ymd);
+            }}
+          >
+            Hoy
+          </Button>
+
+          {/* Spacer pushes the action buttons to the right */}
+          <div className="ml-auto flex flex-wrap items-end gap-2">
+            <Button onClick={clearAllFilters} disabled={!hasActiveFilters}>
+              <X className="h-4 w-4" />
+              Limpiar filtros
+            </Button>
+            <Button onClick={handleExport}>
+              <Download className="h-4 w-4" />
+              Exportar Excel
+            </Button>
+          </div>
+        </div>
+
+        <div className="rounded-md border">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Fecha de escaneo</TableHead>
+                <TableHead>Nombre del informe</TableHead>
+                <TableHead>Nombre del empleado</TableHead>
+                <TableHead>Identificador de empleado</TableHead>
+                <TableHead>Usuario</TableHead>
+                <TableHead className="w-12" />
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {loading ? (
+                <TableRow>
+                  <TableCell
+                    colSpan={6}
+                    className="h-24 text-center text-muted-foreground"
+                  >
+                    Cargando…
+                  </TableCell>
+                </TableRow>
+              ) : items.length === 0 ? (
+                <TableRow>
+                  <TableCell
+                    colSpan={6}
+                    className="h-24 text-center text-muted-foreground"
+                  >
+                    Sin resultados.
+                  </TableCell>
+                </TableRow>
+              ) : (
+                items.map((scan) => (
+                  <TableRow key={scan.id}>
+                    <TableCell className="font-mono text-xs">
+                      {formatDate(scan.scanDate)}
+                    </TableCell>
+                    <TableCell>{scan.reportName}</TableCell>
+                    <TableCell>
+                      {scan.employeeName ?? (
+                        <span className="text-muted-foreground">—</span>
+                      )}
+                    </TableCell>
+                    <TableCell className="font-mono">
+                      {scan.employeeId}
+                    </TableCell>
+                    <TableCell className="font-mono text-xs text-muted-foreground">
+                      {scan.username}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {isMaster && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          onClick={() => setPendingDelete(scan)}
+                          disabled={deletingId === scan.id}
+                          aria-label="Eliminar"
+                          className="text-muted-foreground hover:text-destructive"
+                        >
+                          {deletingId === scan.id ? (
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                          ) : (
+                            <Trash2 className="h-4 w-4" />
+                          )}
+                        </Button>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
+        </div>
+
+        <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
+          <div className="text-muted-foreground">
+            {total} {total === 1 ? "registro" : "registros"}
+          </div>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              disabled={page <= 1 || loading}
+            >
+              <ChevronLeft className="h-4 w-4" />
+              Anterior
+            </Button>
+            <span className="px-2">
+              Página {page} / {totalPages}
+            </span>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+              disabled={page >= totalPages || loading}
+            >
+              Siguiente
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+      </CardContent>
+
+      <AlertDialog
+        open={pendingDelete !== null}
+        onOpenChange={(open) => {
+          // Block closing while a delete is in flight.
+          if (!open && deletingId !== null) return;
+          if (!open) setPendingDelete(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>¿Eliminar este escaneo?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Esta acción no se puede deshacer.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+
+          {pendingDelete && (
+            <div className="rounded-md border bg-muted/40 p-3 text-sm">
+              <div className="grid grid-cols-[140px_1fr] gap-y-1">
+                <div className="text-muted-foreground">Fecha de escaneo</div>
+                <div className="font-mono text-xs">
+                  {formatDate(pendingDelete.scanDate)}
+                </div>
+                <div className="text-muted-foreground">Nombre del informe</div>
+                <div>{pendingDelete.reportName}</div>
+                <div className="text-muted-foreground">
+                  Identificador de empleado
+                </div>
+                <div className="font-mono">{pendingDelete.employeeId}</div>
+              </div>
+            </div>
+          )}
+
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deletingId !== null}>
+              Cancelar
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => {
+                // Keep the dialog open while the request is in flight; we
+                // close it manually in `confirmDelete`'s finally block.
+                e.preventDefault();
+                void confirmDelete();
+              }}
+              disabled={deletingId !== null}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {deletingId !== null ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Eliminando…
+                </>
+              ) : (
+                <>
+                  <Trash2 className="h-4 w-4" />
+                  Eliminar
+                </>
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </Card>
+  );
+}

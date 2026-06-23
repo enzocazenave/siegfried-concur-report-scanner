@@ -1,0 +1,24 @@
+# Postgres local para desarrollo. Producción usa Neon en Vercel.
+#   docker compose up -d     → levanta la DB
+#   docker compose down      → la apaga (los datos quedan en el volumen)
+#   docker compose down -v   → la apaga y BORRA los datos
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: report_scanner
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d report_scanner"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  pgdata:
