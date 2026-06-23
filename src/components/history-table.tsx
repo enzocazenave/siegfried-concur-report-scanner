@@ -363,17 +363,23 @@ export function HistoryTable({ isMaster }: { isMaster: boolean }) {
 
           {/* Spacer pushes the action buttons to the right */}
           <div className="ml-auto flex flex-wrap items-end gap-2">
-            <Button onClick={clearAllFilters} disabled={!hasActiveFilters}>
+            <Button
+              variant="outline"
+              onClick={clearAllFilters}
+              disabled={!hasActiveFilters}
+              className="min-w-[150px]"
+            >
               <X className="h-4 w-4" />
               Limpiar filtros
             </Button>
-            <Button onClick={handleExport}>
+            <Button onClick={handleExport} className="min-w-[150px]">
               <Download className="h-4 w-4" />
               Exportar Excel
             </Button>
             <Button
               onClick={() => setConfirmSendOpen(true)}
               disabled={pendingCount === 0 || sending}
+              className="min-w-[150px]"
             >
               <Send className="h-4 w-4" />
               Enviar
