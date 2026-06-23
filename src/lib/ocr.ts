@@ -16,17 +16,29 @@ export type OcrResult = {
   employeeId: FieldExtraction;
 };
 
-/** Capture the full video frame as a JPEG blob. */
+// La cámara puede capturar hasta 4K (3840×2160). Subir ese JPEG completo
+// (1–3 MB) domina la latencia del escaneo en producción, sobre todo desde un
+// celular con datos móviles. Lo reescalamos al vuelo: el lado largo no supera
+// MAX_EDGE px y la calidad baja a 0.8. El archivo cae a ~200–400 KB y Claude
+// Vision lo lee igual (internamente reescala de todos modos).
+const MAX_EDGE = 1600;
+
+/** Capture the full video frame as a downscaled JPEG blob. */
 export function captureFrameJpeg(
   video: HTMLVideoElement,
-  quality = 0.92
+  quality = 0.8
 ): Promise<Blob> {
+  const srcW = video.videoWidth;
+  const srcH = video.videoHeight;
+  // Factor de escala: 1 si ya entra dentro de MAX_EDGE (nunca agrandamos).
+  const scale = Math.min(1, MAX_EDGE / Math.max(srcW, srcH));
+
   const canvas = document.createElement("canvas");
-  canvas.width = video.videoWidth;
-  canvas.height = video.videoHeight;
+  canvas.width = Math.round(srcW * scale);
+  canvas.height = Math.round(srcH * scale);
   const ctx = canvas.getContext("2d");
   if (!ctx) throw new Error("Canvas 2D no disponible");
-  ctx.drawImage(video, 0, 0);
+  ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
   return new Promise((resolve, reject) => {
     canvas.toBlob(
       (b) => (b ? resolve(b) : reject(new Error("No se pudo codificar el JPEG."))),
