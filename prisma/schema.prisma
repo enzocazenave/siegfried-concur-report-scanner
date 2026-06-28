@@ -49,6 +49,21 @@ model Scan {
   @@index([reportName, employeeId])
 }
 
+// Padrón de empleados (ABM). Fuente de verdad para validar, al escanear, que
+// el identificador leído por Claude corresponde a un empleado real.
+model Employee {
+  id           Int      @id @default(autoincrement())
+  // Código Concur: "99000" + 5 dígitos (10 en total). Único.
+  employeeId   String   @unique
+  employeeName String
+  team         String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([employeeName])
+  @@index([team])
+}
+
 // Rate limiting: track login attempts per IP. Failed attempts inside the
 // window block further attempts; successful login wipes the IP's failures.
 model LoginAttempt {

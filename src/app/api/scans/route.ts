@@ -90,11 +90,8 @@ export async function POST(req: NextRequest) {
   }
   const reportName = body.reportName.trim();
   const employeeId = body.employeeId.trim();
-  // employeeName is optional but typically present from OCR.
-  const employeeName =
-    typeof body.employeeName === "string"
-      ? body.employeeName.trim() || null
-      : null;
+  // NOTA: ignoramos body.employeeName a propósito. El nombre se toma del
+  // padrón (ver más abajo), que es la fuente de verdad.
   const force = body.force === true;
 
   if (!reportName || !employeeId) {
@@ -103,6 +100,27 @@ export async function POST(req: NextRequest) {
       { status: 400 }
     );
   }
+
+  // El identificador debe corresponder a un empleado real del padrón.
+  // Esta es la validación de verdad (el cliente también la hace, pero acá
+  // es donde no se puede saltear).
+  const employee = await prisma.employee.findUnique({
+    where: { employeeId },
+    select: { id: true, employeeName: true },
+  });
+  if (!employee) {
+    return NextResponse.json(
+      {
+        error:
+          "El identificador no corresponde a ningún empleado registrado en el padrón.",
+      },
+      { status: 422 }
+    );
+  }
+  // El padrón es la fuente de verdad del nombre: ignoramos lo que haya leído
+  // el OCR y guardamos SIEMPRE el nombre oficial del empleado. Así un nombre
+  // mal leído por Claude nunca queda persistido.
+  const canonicalEmployeeName = employee.employeeName;
 
   // Duplicate check: same employee + same report period already in DB?
   // The user can override with `force: true` after seeing the conflict.
@@ -131,7 +149,12 @@ export async function POST(req: NextRequest) {
   }
 
   const scan = await prisma.scan.create({
-    data: { reportName, employeeName, employeeId, userId: guard.userId },
+    data: {
+      reportName,
+      employeeName: canonicalEmployeeName,
+      employeeId,
+      userId: guard.userId,
+    },
   });
   return NextResponse.json(scan, { status: 201 });
 }

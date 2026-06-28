@@ -59,6 +59,19 @@ type DuplicateInfo = {
   username: string;
 };
 
+type RegistryEmployee = {
+  employeeId: string;
+  employeeName: string;
+  team: string;
+};
+
+// Resultado de validar el código contra el padrón de empleados.
+type EmployeeMatch =
+  | { status: "idle" } // formato aún inválido / sin chequear
+  | { status: "checking" }
+  | { status: "found"; employee: RegistryEmployee }
+  | { status: "notfound" };
+
 export function Scanner() {
   const videoRef = React.useRef<HTMLVideoElement>(null);
   const streamRef = React.useRef<MediaStream | null>(null);
@@ -70,6 +83,45 @@ export function Scanner() {
   const [cameraError, setCameraError] = React.useState<string | null>(null);
   const [result, setResult] = React.useState<OcrResult | null>(null);
   const [duplicate, setDuplicate] = React.useState<DuplicateInfo | null>(null);
+  const [employeeMatch, setEmployeeMatch] = React.useState<EmployeeMatch>({
+    status: "idle",
+  });
+
+  // Cada vez que cambia el identificador (escaneado o tipeado a mano), si tiene
+  // formato válido lo verificamos contra el padrón. Con debounce para no
+  // disparar un request por cada tecla.
+  React.useEffect(() => {
+    const id = employeeId.trim();
+    if (!isEmployeeIdValid(id)) {
+      setEmployeeMatch({ status: "idle" });
+      return;
+    }
+    let cancelled = false;
+    setEmployeeMatch({ status: "checking" });
+    const timer = setTimeout(async () => {
+      try {
+        const res = await fetch(
+          `/api/employees/lookup?employeeId=${encodeURIComponent(id)}`
+        );
+        const body = await res.json();
+        if (cancelled) return;
+        if (res.ok && body?.found) {
+          setEmployeeMatch({ status: "found", employee: body.employee });
+          // El padrón es la fuente de verdad: reescribimos SIEMPRE el nombre
+          // con el oficial, corrigiendo cualquier error de lectura de Claude.
+          setEmployeeName(body.employee.employeeName);
+        } else {
+          setEmployeeMatch({ status: "notfound" });
+        }
+      } catch {
+        if (!cancelled) setEmployeeMatch({ status: "notfound" });
+      }
+    }, 350);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [employeeId]);
 
   React.useEffect(() => {
     let active = true;
@@ -239,7 +291,13 @@ export function Scanner() {
   const reportNameValid = isReportNameValid(reportName);
   const employeeNameValid = isEmployeeNameValid(employeeName);
   const employeeIdValid = isEmployeeIdValid(employeeId);
-  const formValid = reportNameValid && employeeNameValid && employeeIdValid;
+  // El identificador, además del formato, debe existir en el padrón.
+  const employeeRegistered = employeeMatch.status === "found";
+  const formValid =
+    reportNameValid &&
+    employeeNameValid &&
+    employeeIdValid &&
+    employeeRegistered;
 
   async function handleConfirm() {
     if (!formValid) {
@@ -377,6 +435,9 @@ export function Scanner() {
                 error={
                   employeeNameValid ? null : "El nombre no puede estar vacío."
                 }
+                // Si el código matchea el padrón, el nombre lo manda el padrón:
+                // se rellena solo y se bloquea para que no haya que corregirlo.
+                locked={employeeMatch.status === "found"}
               />
 
               <FieldWithConfidence
@@ -392,6 +453,10 @@ export function Scanner() {
                     : "Debe empezar con 99000 y tener 10 dígitos en total."
                 }
               />
+
+              {employeeIdValid && (
+                <EmployeeMatchBanner match={employeeMatch} />
+              )}
 
               <div className="flex gap-3 pt-2">
                 <Button
@@ -481,6 +546,39 @@ export function Scanner() {
   );
 }
 
+function EmployeeMatchBanner({ match }: { match: EmployeeMatch }) {
+  if (match.status === "idle") return null;
+  if (match.status === "checking") {
+    return (
+      <p className="-mt-1 flex items-center gap-1.5 text-xs text-muted-foreground">
+        <Loader2 className="h-3 w-3 animate-spin" />
+        Verificando en el padrón…
+      </p>
+    );
+  }
+  if (match.status === "notfound") {
+    return (
+      <div className="-mt-1 flex items-start gap-1.5 rounded-md border border-destructive/40 bg-destructive/10 px-2.5 py-1.5 text-xs text-destructive">
+        <XCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+        <span>
+          Este código no corresponde a ningún empleado del padrón. No se puede
+          confirmar.
+        </span>
+      </div>
+    );
+  }
+  // found
+  return (
+    <div className="-mt-1 flex items-start gap-1.5 rounded-md border border-green-600/40 bg-green-600/10 px-2.5 py-1.5 text-xs text-green-700 dark:text-green-400">
+      <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+      <span>
+        Empleado del padrón:{" "}
+        <strong>{match.employee.employeeName}</strong> — {match.employee.team}
+      </span>
+    </div>
+  );
+}
+
 function FieldWithConfidence({
   id,
   label,
@@ -489,6 +587,7 @@ function FieldWithConfidence({
   confidence,
   fieldEmpty,
   error,
+  locked = false,
 }: {
   id: string;
   label: string;
@@ -498,6 +597,8 @@ function FieldWithConfidence({
   fieldEmpty: boolean;
   // Mensaje de validación de formato; null si el campo es válido.
   error?: string | null;
+  // Campo tomado del padrón (no editable, sin badges de confianza).
+  locked?: boolean;
 }) {
   // Visual contract:
   //   high   → green badge, default input style
@@ -539,6 +640,16 @@ function FieldWithConfidence({
     // Formato inválido: el borde rojo manda por sobre el de confianza.
     inputClass = "border-destructive focus-visible:ring-destructive";
   }
+  if (locked) {
+    // Tomado del padrón: pisa cualquier estado de confianza/error. No editable.
+    badge = (
+      <span className="inline-flex items-center gap-1 rounded bg-green-600/10 px-2 py-0.5 text-xs font-medium text-green-700 dark:text-green-400">
+        <CheckCircle2 className="h-3 w-3" />
+        Del padrón
+      </span>
+    );
+    inputClass = "border-green-600/40 bg-muted/50";
+  }
 
   return (
     <div className="space-y-2">
@@ -550,15 +661,23 @@ function FieldWithConfidence({
         id={id}
         value={value}
         onChange={(e) => onChange(e.target.value)}
+        readOnly={locked}
         placeholder={
           confidence === "low"
             ? "(re-escaneá o escribilo a mano)"
             : "(escribilo a mano)"
         }
         className={inputClass}
-        aria-invalid={!!error}
+        aria-invalid={!locked && !!error}
       />
-      {error && <p className="text-xs text-destructive">{error}</p>}
+      {error && !locked && (
+        <p className="text-xs text-destructive">{error}</p>
+      )}
+      {locked && (
+        <p className="text-xs text-muted-foreground">
+          Nombre tomado del padrón (código validado). No hace falta corregirlo.
+        </p>
+      )}
     </div>
   );
 }

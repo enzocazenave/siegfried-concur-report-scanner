@@ -38,6 +38,9 @@ export function HeaderNav({ isMaster }: { isMaster: boolean }) {
   const isHistory = pathname === "/history" || pathname.startsWith("/history/");
   const isUsers =
     pathname === "/admin/users" || pathname.startsWith("/admin/users/");
+  const isEmployees =
+    pathname === "/admin/employees" ||
+    pathname.startsWith("/admin/employees/");
 
   return (
     <nav className="flex items-center gap-4 text-sm">
@@ -47,6 +50,11 @@ export function HeaderNav({ isMaster }: { isMaster: boolean }) {
       <NavLink href="/history" active={isHistory}>
         Historial
       </NavLink>
+      {isMaster && (
+        <NavLink href="/admin/employees" active={isEmployees}>
+          Empleados
+        </NavLink>
+      )}
       {isMaster && (
         <NavLink href="/admin/users" active={isUsers}>
           Usuarios
