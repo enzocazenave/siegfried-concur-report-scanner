@@ -33,6 +33,23 @@ import { formatDate } from "@/lib/utils";
 
 type Phase = "idle" | "scanning" | "review";
 
+// Reglas de validación de los campos antes de poder confirmar:
+//  - Nombre del informe: período MM/YYYY (mes 01–12, año de 4 dígitos).
+//  - Nombre del empleado: cualquier texto no vacío.
+//  - Identificador: empieza con 99000 y le siguen 5 dígitos (10 en total).
+const REPORT_NAME_RE = /^(0[1-9]|1[0-2])\/\d{4}$/;
+const EMPLOYEE_ID_RE = /^99000\d{5}$/;
+
+function isReportNameValid(v: string): boolean {
+  return REPORT_NAME_RE.test(v.trim());
+}
+function isEmployeeNameValid(v: string): boolean {
+  return v.trim().length > 0;
+}
+function isEmployeeIdValid(v: string): boolean {
+  return EMPLOYEE_ID_RE.test(v.trim());
+}
+
 type DuplicateInfo = {
   id: number;
   scanDate: string;
@@ -219,9 +236,14 @@ export function Scanner() {
     };
   }
 
+  const reportNameValid = isReportNameValid(reportName);
+  const employeeNameValid = isEmployeeNameValid(employeeName);
+  const employeeIdValid = isEmployeeIdValid(employeeId);
+  const formValid = reportNameValid && employeeNameValid && employeeIdValid;
+
   async function handleConfirm() {
-    if (!reportName.trim() || !employeeId.trim()) {
-      toast.error("Nombre del informe e Identificador de empleado son obligatorios.");
+    if (!formValid) {
+      toast.error("Revisá los campos: hay datos que no cumplen el formato.");
       return;
     }
     setSaving(true);
@@ -338,6 +360,11 @@ export function Scanner() {
                 onChange={setReportName}
                 confidence={result?.reportName.confidence}
                 fieldEmpty={!reportName}
+                error={
+                  reportNameValid
+                    ? null
+                    : "Debe tener el formato MM/YYYY (ej. 03/2026)."
+                }
               />
 
               <FieldWithConfidence
@@ -347,6 +374,9 @@ export function Scanner() {
                 onChange={setEmployeeName}
                 confidence={result?.employeeName.confidence}
                 fieldEmpty={!employeeName}
+                error={
+                  employeeNameValid ? null : "El nombre no puede estar vacío."
+                }
               />
 
               <FieldWithConfidence
@@ -356,13 +386,18 @@ export function Scanner() {
                 onChange={setEmployeeId}
                 confidence={result?.employeeId.confidence}
                 fieldEmpty={!employeeId}
+                error={
+                  employeeIdValid
+                    ? null
+                    : "Debe empezar con 99000 y tener 10 dígitos en total."
+                }
               />
 
               <div className="flex gap-3 pt-2">
                 <Button
                   className="flex-1"
                   onClick={handleConfirm}
-                  disabled={saving || !reportName.trim() || !employeeId.trim()}
+                  disabled={saving || !formValid}
                 >
                   {saving ? (
                     <Loader2 className="h-4 w-4 animate-spin" />
@@ -453,6 +488,7 @@ function FieldWithConfidence({
   onChange,
   confidence,
   fieldEmpty,
+  error,
 }: {
   id: string;
   label: string;
@@ -460,6 +496,8 @@ function FieldWithConfidence({
   onChange: (v: string) => void;
   confidence: FieldConfidence | undefined;
   fieldEmpty: boolean;
+  // Mensaje de validación de formato; null si el campo es válido.
+  error?: string | null;
 }) {
   // Visual contract:
   //   high   → green badge, default input style
@@ -497,6 +535,10 @@ function FieldWithConfidence({
     // Reinforce empty-state with red border so the user can't miss it.
     inputClass = "border-destructive focus-visible:ring-destructive";
   }
+  if (error) {
+    // Formato inválido: el borde rojo manda por sobre el de confianza.
+    inputClass = "border-destructive focus-visible:ring-destructive";
+  }
 
   return (
     <div className="space-y-2">
@@ -514,7 +556,9 @@ function FieldWithConfidence({
             : "(escribilo a mano)"
         }
         className={inputClass}
+        aria-invalid={!!error}
       />
+      {error && <p className="text-xs text-destructive">{error}</p>}
     </div>
   );
 }
