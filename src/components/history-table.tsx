@@ -5,17 +5,21 @@ import {
   CalendarDays,
   ChevronLeft,
   ChevronRight,
+  CheckCircle2,
   Download,
   Loader2,
+  Pencil,
   Search,
   Send,
   Trash2,
   X,
+  XCircle,
 } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Table,
   TableBody,
@@ -61,6 +65,21 @@ type Stats = {
   pending: number;
 };
 
+type RegistryEmployee = {
+  employeeId: string;
+  employeeName: string;
+  team: string;
+};
+
+type EmployeeMatch =
+  | { status: "idle" }
+  | { status: "checking" }
+  | { status: "found"; employee: RegistryEmployee }
+  | { status: "notfound" };
+
+const REPORT_NAME_RE = /^(0[1-9]|1[0-2])\/\d{4}$/;
+const EMPLOYEE_ID_RE = /^99000\d{5}$/;
+
 export function HistoryTable({ isMaster }: { isMaster: boolean }) {
   // The visible input only holds the SUFFIX. The full search term sent to the
   // API is always "99000" + suffix (all Siegfried IDs start with that prefix).
@@ -80,7 +99,47 @@ export function HistoryTable({ isMaster }: { isMaster: boolean }) {
   const [stats, setStats] = React.useState<Stats | null>(null);
   const [confirmSendOpen, setConfirmSendOpen] = React.useState(false);
   const [sending, setSending] = React.useState(false);
+  // Edición (solo maestro).
+  const [pendingEdit, setPendingEdit] = React.useState<Scan | null>(null);
+  const [editReportName, setEditReportName] = React.useState("");
+  const [editEmployeeId, setEditEmployeeId] = React.useState("");
+  const [savingEdit, setSavingEdit] = React.useState(false);
+  const [editMatch, setEditMatch] = React.useState<EmployeeMatch>({
+    status: "idle",
+  });
   const pageSize = 10;
+
+  // Valida el código del editor contra el padrón (con debounce).
+  React.useEffect(() => {
+    if (!pendingEdit) return;
+    const id = editEmployeeId.trim();
+    if (!EMPLOYEE_ID_RE.test(id)) {
+      setEditMatch({ status: "idle" });
+      return;
+    }
+    let cancelled = false;
+    setEditMatch({ status: "checking" });
+    const timer = setTimeout(async () => {
+      try {
+        const res = await fetch(
+          `/api/employees/lookup?employeeId=${encodeURIComponent(id)}`
+        );
+        const body = await res.json();
+        if (cancelled) return;
+        setEditMatch(
+          res.ok && body?.found
+            ? { status: "found", employee: body.employee }
+            : { status: "notfound" }
+        );
+      } catch {
+        if (!cancelled) setEditMatch({ status: "notfound" });
+      }
+    }, 350);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [editEmployeeId, pendingEdit]);
 
   // Build the shared filter query params (used by both the list fetch and
   // the Excel export so the exported file matches exactly what's on screen).
@@ -162,6 +221,47 @@ export function HistoryTable({ isMaster }: { isMaster: boolean }) {
     !!team.trim() ||
     !!fromDate ||
     !!toDate;
+
+  function openEdit(scan: Scan) {
+    setEditReportName(scan.reportName);
+    setEditEmployeeId(scan.employeeId);
+    setEditMatch({ status: "idle" });
+    setPendingEdit(scan);
+  }
+
+  const editReportNameValid = REPORT_NAME_RE.test(editReportName.trim());
+  const editEmployeeIdValid = EMPLOYEE_ID_RE.test(editEmployeeId.trim());
+  const editValid =
+    editReportNameValid &&
+    editEmployeeIdValid &&
+    editMatch.status === "found";
+
+  async function confirmEdit() {
+    const scan = pendingEdit;
+    if (!scan || !editValid) return;
+    setSavingEdit(true);
+    try {
+      const res = await fetch(`/api/scans/${scan.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          reportName: editReportName.trim(),
+          employeeId: editEmployeeId.trim(),
+        }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(body?.error ?? "No se pudo actualizar el escaneo.");
+      }
+      toast.success("Escaneo actualizado.");
+      setPendingEdit(null);
+      await fetchPage();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Error desconocido");
+    } finally {
+      setSavingEdit(false);
+    }
+  }
 
   async function confirmDelete() {
     const scan = pendingDelete;
@@ -413,7 +513,7 @@ export function HistoryTable({ isMaster }: { isMaster: boolean }) {
                 <TableHead>Equipo</TableHead>
                 <TableHead>Fecha de envío</TableHead>
                 <TableHead>Usuario</TableHead>
-                <TableHead className="w-12" />
+                <TableHead className="w-24" />
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -467,20 +567,32 @@ export function HistoryTable({ isMaster }: { isMaster: boolean }) {
                     </TableCell>
                     <TableCell className="text-right">
                       {isMaster && (
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          onClick={() => setPendingDelete(scan)}
-                          disabled={deletingId === scan.id}
-                          aria-label="Eliminar"
-                          className="text-muted-foreground hover:text-destructive"
-                        >
-                          {deletingId === scan.id ? (
-                            <Loader2 className="h-4 w-4 animate-spin" />
-                          ) : (
-                            <Trash2 className="h-4 w-4" />
-                          )}
-                        </Button>
+                        <div className="flex justify-end gap-1">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => openEdit(scan)}
+                            aria-label="Editar"
+                            title="Editar"
+                            className="text-muted-foreground hover:text-foreground"
+                          >
+                            <Pencil className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => setPendingDelete(scan)}
+                            disabled={deletingId === scan.id}
+                            aria-label="Eliminar"
+                            className="text-muted-foreground hover:text-destructive"
+                          >
+                            {deletingId === scan.id ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                              <Trash2 className="h-4 w-4" />
+                            )}
+                          </Button>
+                        </div>
                       )}
                     </TableCell>
                   </TableRow>
@@ -519,6 +631,116 @@ export function HistoryTable({ isMaster }: { isMaster: boolean }) {
           </div>
         </div>
       </CardContent>
+
+      <AlertDialog
+        open={pendingEdit !== null}
+        onOpenChange={(open) => {
+          if (!open && savingEdit) return;
+          if (!open) setPendingEdit(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Editar escaneo</AlertDialogTitle>
+            <AlertDialogDescription>
+              Corregí el período o el identificador. El nombre y el equipo se
+              toman del padrón según el código.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              void confirmEdit();
+            }}
+            className="space-y-3"
+          >
+            <div className="space-y-1.5">
+              <Label htmlFor="edit-report-name">Nombre del informe</Label>
+              <Input
+                id="edit-report-name"
+                value={editReportName}
+                onChange={(e) => setEditReportName(e.target.value)}
+                placeholder="MM/YYYY (ej. 03/2026)"
+                className={
+                  editReportName && !editReportNameValid
+                    ? "border-destructive focus-visible:ring-destructive"
+                    : undefined
+                }
+              />
+              {editReportName && !editReportNameValid && (
+                <p className="text-xs text-destructive">
+                  Debe tener el formato MM/YYYY (ej. 03/2026).
+                </p>
+              )}
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="edit-employee-id">Identificador de empleado</Label>
+              <Input
+                id="edit-employee-id"
+                value={editEmployeeId}
+                inputMode="numeric"
+                onChange={(e) =>
+                  setEditEmployeeId(e.target.value.replace(/\D/g, ""))
+                }
+                className="font-mono"
+                maxLength={10}
+              />
+              {editEmployeeId && !editEmployeeIdValid && (
+                <p className="text-xs text-destructive">
+                  Debe empezar con 99000 y tener 10 dígitos en total.
+                </p>
+              )}
+              {editEmployeeIdValid && editMatch.status === "checking" && (
+                <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                  Verificando en el padrón…
+                </p>
+              )}
+              {editEmployeeIdValid && editMatch.status === "notfound" && (
+                <p className="flex items-start gap-1.5 text-xs text-destructive">
+                  <XCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                  Este código no corresponde a ningún empleado del padrón.
+                </p>
+              )}
+              {editMatch.status === "found" && (
+                <p className="flex items-start gap-1.5 text-xs text-green-700 dark:text-green-400">
+                  <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+                  <span>
+                    {editMatch.employee.employeeName} — {editMatch.employee.team}
+                  </span>
+                </p>
+              )}
+            </div>
+          </form>
+
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={savingEdit}>
+              Cancelar
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(e) => {
+                e.preventDefault();
+                void confirmEdit();
+              }}
+              disabled={savingEdit || !editValid}
+            >
+              {savingEdit ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Guardando…
+                </>
+              ) : (
+                <>
+                  <Pencil className="h-4 w-4" />
+                  Guardar
+                </>
+              )}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <AlertDialog
         open={pendingDelete !== null}
