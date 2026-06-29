@@ -23,6 +23,7 @@ export async function GET(req: NextRequest) {
   const employeeId = searchParams.get("employeeId")?.trim() ?? "";
   const reportName = searchParams.get("reportName")?.trim() ?? "";
   const employeeName = searchParams.get("employeeName")?.trim() ?? "";
+  const team = searchParams.get("team")?.trim() ?? "";
   const from = parseIsoDate(searchParams.get("from"));
   const to = parseIsoDate(searchParams.get("to"));
 
@@ -35,6 +36,7 @@ export async function GET(req: NextRequest) {
       employeeId ? { employeeId: { contains: employeeId } } : {},
       reportName ? { reportName: { contains: reportName } } : {},
       employeeName ? { employeeName: { contains: employeeName } } : {},
+      team ? { team: { contains: team } } : {},
       Object.keys(dateFilter).length > 0 ? { scanDate: dateFilter } : {},
     ],
   };

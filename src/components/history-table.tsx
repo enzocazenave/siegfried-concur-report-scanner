@@ -42,6 +42,7 @@ type Scan = {
   reportName: string;
   employeeName: string | null;
   employeeId: string;
+  team: string | null;
   sentAt: string | null;
   username: string;
 };
@@ -67,6 +68,7 @@ export function HistoryTable({ isMaster }: { isMaster: boolean }) {
   const [employeeIdSuffix, setEmployeeIdSuffix] = React.useState("");
   const [reportName, setReportName] = React.useState("");
   const [employeeName, setEmployeeName] = React.useState("");
+  const [team, setTeam] = React.useState("");
   // YYYY-MM-DD as typed in <input type="date">; empty string = unset.
   const [fromDate, setFromDate] = React.useState("");
   const [toDate, setToDate] = React.useState("");
@@ -91,6 +93,7 @@ export function HistoryTable({ isMaster }: { isMaster: boolean }) {
     }
     if (reportName.trim()) params.set("reportName", reportName.trim());
     if (employeeName.trim()) params.set("employeeName", employeeName.trim());
+    if (team.trim()) params.set("team", team.trim());
     if (fromDate) {
       // Local-TZ start of day.
       params.set("from", new Date(`${fromDate}T00:00:00`).toISOString());
@@ -100,7 +103,7 @@ export function HistoryTable({ isMaster }: { isMaster: boolean }) {
       params.set("to", new Date(`${toDate}T23:59:59.999`).toISOString());
     }
     return params;
-  }, [employeeIdSuffix, reportName, employeeName, fromDate, toDate]);
+  }, [employeeIdSuffix, reportName, employeeName, team, fromDate, toDate]);
 
   const fetchPage = React.useCallback(async () => {
     setLoading(true);
@@ -141,12 +144,13 @@ export function HistoryTable({ isMaster }: { isMaster: boolean }) {
   // Reset page when filters change.
   React.useEffect(() => {
     setPage(1);
-  }, [employeeIdSuffix, reportName, employeeName, fromDate, toDate]);
+  }, [employeeIdSuffix, reportName, employeeName, team, fromDate, toDate]);
 
   function clearAllFilters() {
     setEmployeeIdSuffix("");
     setReportName("");
     setEmployeeName("");
+    setTeam("");
     setFromDate("");
     setToDate("");
   }
@@ -155,6 +159,7 @@ export function HistoryTable({ isMaster }: { isMaster: boolean }) {
     !!employeeIdSuffix.trim() ||
     !!reportName.trim() ||
     !!employeeName.trim() ||
+    !!team.trim() ||
     !!fromDate ||
     !!toDate;
 
@@ -309,6 +314,15 @@ export function HistoryTable({ isMaster }: { isMaster: boolean }) {
               className="pl-8"
             />
           </div>
+          <div className="relative">
+            <Search className="pointer-events-none absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Buscar por equipo…"
+              value={team}
+              onChange={(e) => setTeam(e.target.value)}
+              className="pl-8"
+            />
+          </div>
         </div>
 
         <div className="flex flex-wrap items-end gap-3">
@@ -396,6 +410,7 @@ export function HistoryTable({ isMaster }: { isMaster: boolean }) {
                 <TableHead>Nombre del informe</TableHead>
                 <TableHead>Nombre del empleado</TableHead>
                 <TableHead>Identificador de empleado</TableHead>
+                <TableHead>Equipo</TableHead>
                 <TableHead>Fecha de envío</TableHead>
                 <TableHead>Usuario</TableHead>
                 <TableHead className="w-12" />
@@ -405,7 +420,7 @@ export function HistoryTable({ isMaster }: { isMaster: boolean }) {
               {loading ? (
                 <TableRow>
                   <TableCell
-                    colSpan={7}
+                    colSpan={8}
                     className="h-24 text-center text-muted-foreground"
                   >
                     Cargando…
@@ -414,7 +429,7 @@ export function HistoryTable({ isMaster }: { isMaster: boolean }) {
               ) : items.length === 0 ? (
                 <TableRow>
                   <TableCell
-                    colSpan={7}
+                    colSpan={8}
                     className="h-24 text-center text-muted-foreground"
                   >
                     Sin resultados.
@@ -434,6 +449,9 @@ export function HistoryTable({ isMaster }: { isMaster: boolean }) {
                     </TableCell>
                     <TableCell className="font-mono">
                       {scan.employeeId}
+                    </TableCell>
+                    <TableCell className="text-sm text-muted-foreground">
+                      {scan.team ?? <span className="text-muted-foreground">—</span>}
                     </TableCell>
                     <TableCell className="font-mono text-xs">
                       {scan.sentAt ? (

@@ -31,6 +31,9 @@ model Scan {
   reportName   String
   employeeName String?
   employeeId   String
+  // Equipo del empleado, copiado del padrón al momento de escanear (igual que
+  // employeeName). Nullable por filas históricas previas al padrón.
+  team         String?
   // Timestamp del envío. NULL = todavía no enviado. Lo estampa el botón
   // "Enviar" del historial (POST /api/scans/send) sobre los informes pendientes.
   sentAt       DateTime?
@@ -43,6 +46,7 @@ model Scan {
   @@index([employeeId])
   @@index([reportName])
   @@index([userId])
+  @@index([team])
   // Usado por el filtro de pendientes / stats (informes sin enviar).
   @@index([sentAt])
   // Used by the duplicate-check on POST /api/scans.

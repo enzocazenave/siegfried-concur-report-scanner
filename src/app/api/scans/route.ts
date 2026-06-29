@@ -24,6 +24,7 @@ export async function GET(req: NextRequest) {
   const employeeId = searchParams.get("employeeId")?.trim() ?? "";
   const reportName = searchParams.get("reportName")?.trim() ?? "";
   const employeeName = searchParams.get("employeeName")?.trim() ?? "";
+  const team = searchParams.get("team")?.trim() ?? "";
   const from = parseIsoDate(searchParams.get("from"));
   const to = parseIsoDate(searchParams.get("to"));
 
@@ -36,6 +37,7 @@ export async function GET(req: NextRequest) {
       employeeId ? { employeeId: { contains: employeeId } } : {},
       reportName ? { reportName: { contains: reportName } } : {},
       employeeName ? { employeeName: { contains: employeeName } } : {},
+      team ? { team: { contains: team } } : {},
       Object.keys(dateFilter).length > 0 ? { scanDate: dateFilter } : {},
     ],
   };
@@ -59,6 +61,7 @@ export async function GET(req: NextRequest) {
     reportName: s.reportName,
     employeeName: s.employeeName,
     employeeId: s.employeeId,
+    team: s.team,
     sentAt: s.sentAt,
     createdAt: s.createdAt,
     username: s.user.username,
@@ -106,7 +109,7 @@ export async function POST(req: NextRequest) {
   // es donde no se puede saltear).
   const employee = await prisma.employee.findUnique({
     where: { employeeId },
-    select: { id: true, employeeName: true },
+    select: { id: true, employeeName: true, team: true },
   });
   if (!employee) {
     return NextResponse.json(
@@ -117,10 +120,11 @@ export async function POST(req: NextRequest) {
       { status: 422 }
     );
   }
-  // El padrón es la fuente de verdad del nombre: ignoramos lo que haya leído
-  // el OCR y guardamos SIEMPRE el nombre oficial del empleado. Así un nombre
-  // mal leído por Claude nunca queda persistido.
+  // El padrón es la fuente de verdad: ignoramos lo que haya leído el OCR y
+  // guardamos SIEMPRE el nombre y el equipo oficiales del empleado. Así un
+  // nombre mal leído por Claude nunca queda persistido.
   const canonicalEmployeeName = employee.employeeName;
+  const canonicalTeam = employee.team;
 
   // Duplicate check: same employee + same report period already in DB?
   // The user can override with `force: true` after seeing the conflict.
@@ -153,6 +157,7 @@ export async function POST(req: NextRequest) {
       reportName,
       employeeName: canonicalEmployeeName,
       employeeId,
+      team: canonicalTeam,
       userId: guard.userId,
     },
   });

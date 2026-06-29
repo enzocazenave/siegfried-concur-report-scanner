@@ -6,6 +6,7 @@ export type ExportScan = {
   reportName: string;
   employeeName: string | null;
   employeeId: string;
+  team: string | null;
   sentAt: Date | null;
 };
 
@@ -30,6 +31,7 @@ export function buildScansExcelBuffer(scans: ExportScan[]): Uint8Array {
     "Nombre del informe": s.reportName,
     "Nombre del empleado": s.employeeName ?? "",
     "Identificador de empleado": s.employeeId,
+    Equipo: s.team ?? "",
     "Fecha de envío": s.sentAt ? formatExcelDate(s.sentAt) : "",
   }));
 
@@ -39,6 +41,7 @@ export function buildScansExcelBuffer(scans: ExportScan[]): Uint8Array {
     { wch: 22 },
     { wch: 28 },
     { wch: 28 },
+    { wch: 26 },
     { wch: 22 },
   ];
 
