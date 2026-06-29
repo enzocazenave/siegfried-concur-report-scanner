@@ -16,6 +16,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { TeamCombobox } from "@/components/team-combobox";
 import {
   Table,
   TableBody,
@@ -59,6 +60,7 @@ export function EmployeesAdmin() {
   const [loading, setLoading] = React.useState(true);
   const [query, setQuery] = React.useState("");
   const [page, setPage] = React.useState(1);
+  const [teams, setTeams] = React.useState<string[]>([]);
 
   // Alta
   const [newId, setNewId] = React.useState("");
@@ -94,9 +96,24 @@ export function EmployeesAdmin() {
     }
   }, [query, page]);
 
+  const fetchTeams = React.useCallback(async () => {
+    try {
+      const res = await fetch("/api/admin/teams");
+      if (!res.ok) return;
+      const body = (await res.json()) as { teams: string[] };
+      setTeams(body.teams);
+    } catch {
+      /* non-blocking */
+    }
+  }, []);
+
   React.useEffect(() => {
     fetchPage();
   }, [fetchPage]);
+
+  React.useEffect(() => {
+    fetchTeams();
+  }, [fetchTeams]);
 
   // Reset a página 1 cuando cambia la búsqueda.
   React.useEffect(() => {
@@ -131,7 +148,7 @@ export function EmployeesAdmin() {
       setNewId("");
       setNewName("");
       setNewTeam("");
-      await fetchPage();
+      await Promise.all([fetchPage(), fetchTeams()]);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Error desconocido");
     } finally {
@@ -169,7 +186,7 @@ export function EmployeesAdmin() {
       }
       toast.success("Empleado actualizado.");
       setPendingEdit(null);
-      await fetchPage();
+      await Promise.all([fetchPage(), fetchTeams()]);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Error desconocido");
     } finally {
@@ -244,11 +261,11 @@ export function EmployeesAdmin() {
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="new-team">Equipo</Label>
-              <Input
+              <TeamCombobox
                 id="new-team"
                 value={newTeam}
-                onChange={(e) => setNewTeam(e.target.value)}
-                placeholder="ej. Marketing"
+                onChange={setNewTeam}
+                teams={teams}
               />
             </div>
             <Button type="submit" disabled={creating}>
@@ -426,10 +443,11 @@ export function EmployeesAdmin() {
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="edit-team">Equipo</Label>
-              <Input
+              <TeamCombobox
                 id="edit-team"
                 value={editTeam}
-                onChange={(e) => setEditTeam(e.target.value)}
+                onChange={setEditTeam}
+                teams={teams}
               />
             </div>
           </form>
