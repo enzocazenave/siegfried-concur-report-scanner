@@ -12,6 +12,7 @@
     "db:migrate": "prisma migrate dev",
     "db:seed": "node prisma/seed.mjs",
     "db:seed-employees": "node prisma/seed-employees.mjs",
+    "db:backfill-teams": "node prisma/backfill-scan-teams.mjs",
     "db:studio": "prisma studio"
   },
   "dependencies": {
