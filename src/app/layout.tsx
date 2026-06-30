@@ -31,26 +31,28 @@ export default async function RootLayout({
         >
           <div className="flex min-h-screen flex-col">
             <header className="border-b">
-              <div className="container flex h-16 items-center justify-between">
-                <div className="flex items-center gap-6">
-                  <Link
-                    href="/"
-                    className="flex items-center gap-2 font-semibold"
-                  >
-                    <Image
-                      src="/siegfried.png"
-                      alt="Siegfried"
-                      width={514}
-                      height={158}
-                      priority
-                      className="h-16 w-auto dark:brightness-110"
-                    />
-                    <span className="hidden text-sm text-muted-foreground sm:inline">
-                      Informes Concur
-                    </span>
-                  </Link>
-                  {session && <HeaderNav isMaster={session.isMaster} />}
-                </div>
+              <div className="container flex h-16 items-center justify-between gap-4">
+                <Link
+                  href="/"
+                  className="flex items-center gap-2 font-semibold"
+                >
+                  <Image
+                    src="/siegfried.png"
+                    alt="Siegfried"
+                    width={514}
+                    height={158}
+                    priority
+                    className="h-16 w-auto dark:brightness-110"
+                  />
+                  <span className="hidden text-sm text-muted-foreground sm:inline">
+                    Informes Concur
+                  </span>
+                </Link>
+                {session && (
+                  <div className="flex flex-1 justify-center">
+                    <HeaderNav isMaster={session.isMaster} />
+                  </div>
+                )}
                 <div className="flex items-center gap-2">
                   {session && <UserMenu username={session.username} />}
                   <ThemeToggle />
