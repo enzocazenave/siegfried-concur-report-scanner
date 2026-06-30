@@ -58,60 +58,56 @@ export async function GET(req: NextRequest) {
   yearSet.add(currentYear);
   const years = [...yearSet].sort((a, b) => b - a);
 
-  // Selección (con defaults).
-  const team = (searchParams.get("team")?.trim() || teams[0]) ?? "";
+  // Selección. team vacío = TODOS los equipos (agrupados).
+  const team = searchParams.get("team")?.trim() ?? "";
   const yearParam = Number(searchParams.get("year"));
   const year =
     Number.isInteger(yearParam) && yearParam > 0 ? yearParam : currentYear;
 
-  let employees: {
-    employeeId: string;
-    employeeName: string;
-    months: Record<string, CellStatus>;
-  }[] = [];
+  // Roster: el equipo filtrado, o todos ordenados por equipo y nombre.
+  const roster = await prisma.employee.findMany({
+    where: team ? { team } : {},
+    select: { employeeId: true, employeeName: true, team: true },
+    orderBy: team
+      ? [{ employeeName: "asc" }]
+      : [{ team: "asc" }, { employeeName: "asc" }],
+  });
+  const ids = roster.map((e) => e.employeeId);
 
-  if (team) {
-    const roster = await prisma.employee.findMany({
-      where: { team },
-      select: { employeeId: true, employeeName: true },
-      orderBy: { employeeName: "asc" },
-    });
-    const ids = roster.map((e) => e.employeeId);
+  const scans = ids.length
+    ? await prisma.scan.findMany({
+        where: {
+          employeeId: { in: ids },
+          reportName: { endsWith: `/${year}` },
+        },
+        select: { employeeId: true, reportName: true, sentAt: true },
+      })
+    : [];
 
-    const scans = ids.length
-      ? await prisma.scan.findMany({
-          where: {
-            employeeId: { in: ids },
-            reportName: { endsWith: `/${year}` },
-          },
-          select: { employeeId: true, reportName: true, sentAt: true },
-        })
-      : [];
-
-    // employeeId -> { MM -> status }
-    const map = new Map<string, Record<string, CellStatus>>();
-    for (const s of scans) {
-      const m = /^(\d{2})\/\d{4}$/.exec(s.reportName);
-      if (!m) continue;
-      const month = m[1];
-      const cur = map.get(s.employeeId) ?? {};
-      const status: CellStatus = s.sentAt ? "sent" : "scanned";
-      // "sent" gana por si hubiera más de un escaneo para el mismo mes.
-      if (cur[month] !== "sent") cur[month] = status;
-      map.set(s.employeeId, cur);
-    }
-
-    employees = roster.map((e) => {
-      const found = map.get(e.employeeId) ?? {};
-      const months: Record<string, CellStatus> = {};
-      for (const mm of MONTHS) months[mm] = found[mm] ?? "missing";
-      return {
-        employeeId: e.employeeId,
-        employeeName: e.employeeName,
-        months,
-      };
-    });
+  // employeeId -> { MM -> status }
+  const map = new Map<string, Record<string, CellStatus>>();
+  for (const s of scans) {
+    const m = /^(\d{2})\/\d{4}$/.exec(s.reportName);
+    if (!m) continue;
+    const month = m[1];
+    const cur = map.get(s.employeeId) ?? {};
+    const status: CellStatus = s.sentAt ? "sent" : "scanned";
+    // "sent" gana por si hubiera más de un escaneo para el mismo mes.
+    if (cur[month] !== "sent") cur[month] = status;
+    map.set(s.employeeId, cur);
   }
+
+  const employees = roster.map((e) => {
+    const found = map.get(e.employeeId) ?? {};
+    const months: Record<string, CellStatus> = {};
+    for (const mm of MONTHS) months[mm] = found[mm] ?? "missing";
+    return {
+      employeeId: e.employeeId,
+      employeeName: e.employeeName,
+      team: e.team,
+      months,
+    };
+  });
 
   return NextResponse.json({ teams, years, team, year, employees });
 }

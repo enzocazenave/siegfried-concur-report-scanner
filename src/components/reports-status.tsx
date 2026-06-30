@@ -14,6 +14,7 @@ type CellStatus = "missing" | "scanned" | "sent";
 type Row = {
   employeeId: string;
   employeeName: string;
+  team: string;
   months: Record<string, CellStatus>;
 };
 
@@ -80,7 +81,7 @@ export function ReportsStatus() {
     if (data?.teams.includes(value)) load(value, year);
   }
 
-  const employees = data?.employees ?? [];
+  const employees = React.useMemo(() => data?.employees ?? [], [data]);
 
   // Resumen del equipo-año.
   const summary = React.useMemo(() => {
@@ -97,6 +98,23 @@ export function ReportsStatus() {
     return { sent, scanned, missing };
   }, [employees]);
 
+  // Agrupamos por equipo (ya vienen ordenados por equipo desde el server).
+  const groups = React.useMemo(() => {
+    const out: { team: string; rows: Row[]; missing: number }[] = [];
+    let current: { team: string; rows: Row[]; missing: number } | null = null;
+    for (const e of employees) {
+      if (!current || current.team !== e.team) {
+        current = { team: e.team, rows: [], missing: 0 };
+        out.push(current);
+      }
+      current.rows.push(e);
+      current.missing += Object.values(e.months).filter(
+        (s) => s === "missing"
+      ).length;
+    }
+    return out;
+  }, [employees]);
+
   return (
     <div className="space-y-4">
       <Card>
@@ -104,13 +122,25 @@ export function ReportsStatus() {
           <div className="flex flex-wrap items-end gap-4">
             <div className="w-full max-w-xs space-y-1.5">
               <Label htmlFor="team-filter">Equipo</Label>
-              <TeamCombobox
-                id="team-filter"
-                value={team}
-                onChange={selectTeam}
-                teams={data?.teams ?? []}
-                placeholder="Buscar equipo…"
-              />
+              <div className="flex gap-2">
+                <div className="flex-1">
+                  <TeamCombobox
+                    id="team-filter"
+                    value={team}
+                    onChange={selectTeam}
+                    teams={data?.teams ?? []}
+                    placeholder="Todos los equipos"
+                  />
+                </div>
+                <Button
+                  variant="outline"
+                  onClick={() => load("", year)}
+                  disabled={!team}
+                  title="Ver todos los equipos"
+                >
+                  Todos
+                </Button>
+              </div>
             </div>
             <div className="space-y-1.5">
               <Label>Año</Label>
@@ -184,17 +214,37 @@ export function ReportsStatus() {
                     </td>
                   </tr>
                 ) : (
-                  employees.map((e) => (
-                    <tr key={e.employeeId} className="border-b last:border-0">
-                      <td className="sticky left-0 z-10 bg-background px-3 py-1.5 font-medium">
-                        {e.employeeName}
-                      </td>
-                      {MONTHS.map(([num]) => (
-                        <td key={num} className="px-1 py-1.5 text-center">
-                          <StatusCell status={e.months[num]} />
+                  groups.map((g) => (
+                    <React.Fragment key={g.team}>
+                      <tr className="border-b bg-muted/60">
+                        <td
+                          colSpan={MONTHS.length + 1}
+                          className="sticky left-0 px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground"
+                        >
+                          {g.team}
+                          <span className="ml-2 font-normal normal-case">
+                            · {g.rows.length}{" "}
+                            {g.rows.length === 1 ? "empleado" : "empleados"}
+                            {g.missing > 0 && ` · ${g.missing} faltantes`}
+                          </span>
                         </td>
+                      </tr>
+                      {g.rows.map((e) => (
+                        <tr
+                          key={e.employeeId}
+                          className="border-b last:border-0"
+                        >
+                          <td className="sticky left-0 z-10 bg-background px-3 py-1.5 font-medium">
+                            {e.employeeName}
+                          </td>
+                          {MONTHS.map(([num]) => (
+                            <td key={num} className="px-1 py-1.5 text-center">
+                              <StatusCell status={e.months[num]} />
+                            </td>
+                          ))}
+                        </tr>
                       ))}
-                    </tr>
+                    </React.Fragment>
                   ))
                 )}
               </tbody>
