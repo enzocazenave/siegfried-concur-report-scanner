@@ -31,6 +31,8 @@ export async function POST(req: NextRequest) {
   const username =
     typeof body?.username === "string" ? body.username.trim() : "";
   const password = typeof body?.password === "string" ? body.password : "";
+  // El maestro puede crear operadores o nuevos maestros.
+  const isMaster = body?.isMaster === true;
 
   if (!username || !/^[a-zA-Z0-9._-]{3,32}$/.test(username)) {
     return NextResponse.json(
@@ -51,7 +53,7 @@ export async function POST(req: NextRequest) {
   try {
     const passwordHash = await bcrypt.hash(password, 10);
     const user = await prisma.user.create({
-      data: { username, passwordHash, isMaster: false },
+      data: { username, passwordHash, isMaster },
       select: { id: true, username: true, isMaster: true, createdAt: true },
     });
     return NextResponse.json(user, { status: 201 });

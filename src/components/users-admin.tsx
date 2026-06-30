@@ -46,6 +46,7 @@ export function UsersAdmin() {
   const [loading, setLoading] = React.useState(true);
   const [newUsername, setNewUsername] = React.useState("");
   const [newPassword, setNewPassword] = React.useState("");
+  const [newIsMaster, setNewIsMaster] = React.useState(false);
   const [creating, setCreating] = React.useState(false);
   const [pendingDelete, setPendingDelete] = React.useState<User | null>(null);
   const [deletingId, setDeletingId] = React.useState<number | null>(null);
@@ -84,6 +85,7 @@ export function UsersAdmin() {
         body: JSON.stringify({
           username: newUsername.trim(),
           password: newPassword,
+          isMaster: newIsMaster,
         }),
       });
       if (!res.ok) {
@@ -96,9 +98,12 @@ export function UsersAdmin() {
         }
         throw new Error(message);
       }
-      toast.success("Usuario creado.");
+      toast.success(
+        newIsMaster ? "Usuario maestro creado." : "Usuario operador creado."
+      );
       setNewUsername("");
       setNewPassword("");
+      setNewIsMaster(false);
       await refresh();
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Error desconocido");
@@ -181,7 +186,7 @@ export function UsersAdmin() {
         <CardContent>
           <form
             onSubmit={handleCreate}
-            className="grid gap-3 sm:grid-cols-[1fr_1fr_auto] sm:items-end"
+            className="grid gap-3 sm:grid-cols-[1fr_1fr_auto_auto] sm:items-end"
           >
             <div className="space-y-1.5">
               <Label htmlFor="new-username">Usuario</Label>
@@ -207,6 +212,18 @@ export function UsersAdmin() {
                 minLength={6}
               />
             </div>
+            <label className="flex items-center gap-2 text-sm sm:pb-2.5">
+              <input
+                type="checkbox"
+                checked={newIsMaster}
+                onChange={(e) => setNewIsMaster(e.target.checked)}
+                className="h-4 w-4 rounded border-input accent-primary"
+              />
+              <span className="inline-flex items-center gap-1">
+                <Shield className="h-3.5 w-3.5" />
+                Maestro
+              </span>
+            </label>
             <Button type="submit" disabled={creating}>
               {creating ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
