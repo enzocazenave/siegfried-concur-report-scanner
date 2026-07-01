@@ -179,13 +179,13 @@ export function ReportsStatus() {
             <table className="w-full border-collapse text-sm">
               <thead>
                 <tr className="border-b bg-muted/40">
-                  <th className="sticky left-0 top-0 z-30 bg-muted px-3 py-2 text-left font-medium">
+                  <th className="sticky left-0 top-0 z-30 h-10 bg-muted px-3 py-2 text-left font-medium">
                     Empleado
                   </th>
                   {MONTHS.map(([num, label]) => (
                     <th
                       key={num}
-                      className="sticky top-0 z-20 w-12 bg-muted px-1 py-2 text-center font-medium text-muted-foreground"
+                      className="sticky top-0 z-20 h-10 w-12 bg-muted px-1 py-2 text-center font-medium text-muted-foreground"
                     >
                       {label}
                     </th>
@@ -216,10 +216,10 @@ export function ReportsStatus() {
                 ) : (
                   groups.map((g) => (
                     <React.Fragment key={g.team}>
-                      <tr className="border-b bg-muted/60">
+                      <tr className="border-b">
                         <td
                           colSpan={MONTHS.length + 1}
-                          className="sticky left-0 px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground"
+                          className="sticky left-0 top-10 z-20 border-b bg-muted px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground"
                         >
                           {g.team}
                           <span className="ml-2 font-normal normal-case">
