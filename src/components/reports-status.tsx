@@ -175,17 +175,17 @@ export function ReportsStatus() {
             </span>
           </div>
 
-          <div className="overflow-x-auto rounded-md border">
+          <div className="max-h-[70vh] overflow-auto rounded-md border">
             <table className="w-full border-collapse text-sm">
               <thead>
                 <tr className="border-b bg-muted/40">
-                  <th className="sticky left-0 z-10 bg-muted/40 px-3 py-2 text-left font-medium">
+                  <th className="sticky left-0 top-0 z-30 bg-muted px-3 py-2 text-left font-medium">
                     Empleado
                   </th>
                   {MONTHS.map(([num, label]) => (
                     <th
                       key={num}
-                      className="w-12 px-1 py-2 text-center font-medium text-muted-foreground"
+                      className="sticky top-0 z-20 w-12 bg-muted px-1 py-2 text-center font-medium text-muted-foreground"
                     >
                       {label}
                     </th>

@@ -36,8 +36,10 @@ export async function GET(req: NextRequest) {
     AND: [
       employeeId ? { employeeId: { contains: employeeId } } : {},
       reportName ? { reportName: { contains: reportName } } : {},
-      employeeName ? { employeeName: { contains: employeeName } } : {},
-      team ? { team: { contains: team } } : {},
+      employeeName
+        ? { employeeName: { contains: employeeName, mode: "insensitive" as const } }
+        : {},
+      team ? { team: { contains: team, mode: "insensitive" as const } } : {},
       Object.keys(dateFilter).length > 0 ? { scanDate: dateFilter } : {},
     ],
   };
