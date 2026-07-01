@@ -35,6 +35,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { cn } from "@/lib/utils";
 
 type Employee = {
   id: number;
@@ -295,7 +296,12 @@ export function EmployeesAdmin() {
             />
           </div>
 
-          <div className="rounded-md border">
+          <div
+            className={cn(
+              "rounded-md border transition-opacity",
+              loading && items.length > 0 && "pointer-events-none opacity-60"
+            )}
+          >
             <Table>
               <TableHeader>
                 <TableRow>
@@ -306,22 +312,13 @@ export function EmployeesAdmin() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {loading ? (
+                {items.length === 0 ? (
                   <TableRow>
                     <TableCell
                       colSpan={4}
                       className="h-24 text-center text-muted-foreground"
                     >
-                      Cargando…
-                    </TableCell>
-                  </TableRow>
-                ) : items.length === 0 ? (
-                  <TableRow>
-                    <TableCell
-                      colSpan={4}
-                      className="h-24 text-center text-muted-foreground"
-                    >
-                      Sin resultados.
+                      {loading ? "Cargando…" : "Sin resultados."}
                     </TableCell>
                   </TableRow>
                 ) : (

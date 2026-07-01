@@ -38,7 +38,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { formatDate } from "@/lib/utils";
+import { cn, formatDate } from "@/lib/utils";
 
 type Scan = {
   id: number;
@@ -502,7 +502,12 @@ export function HistoryTable({ isMaster }: { isMaster: boolean }) {
           </div>
         </div>
 
-        <div className="rounded-md border">
+        <div
+          className={cn(
+            "rounded-md border transition-opacity",
+            loading && items.length > 0 && "pointer-events-none opacity-60"
+          )}
+        >
           <Table>
             <TableHeader>
               <TableRow>
@@ -517,22 +522,13 @@ export function HistoryTable({ isMaster }: { isMaster: boolean }) {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {loading ? (
+              {items.length === 0 ? (
                 <TableRow>
                   <TableCell
                     colSpan={8}
                     className="h-24 text-center text-muted-foreground"
                   >
-                    Cargando…
-                  </TableCell>
-                </TableRow>
-              ) : items.length === 0 ? (
-                <TableRow>
-                  <TableCell
-                    colSpan={8}
-                    className="h-24 text-center text-muted-foreground"
-                  >
-                    Sin resultados.
+                    {loading ? "Cargando…" : "Sin resultados."}
                   </TableCell>
                 </TableRow>
               ) : (
