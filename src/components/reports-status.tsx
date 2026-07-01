@@ -219,7 +219,7 @@ export function ReportsStatus() {
                       <tr className="border-b">
                         <td
                           colSpan={MONTHS.length + 1}
-                          className="sticky left-0 top-10 z-20 border-b bg-muted px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground"
+                          className="sticky left-0 top-[39px] z-20 border-b bg-muted px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground"
                         >
                           {g.team}
                           <span className="ml-2 font-normal normal-case">

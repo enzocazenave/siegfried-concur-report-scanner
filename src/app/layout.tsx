@@ -30,7 +30,7 @@ export default async function RootLayout({
           disableTransitionOnChange
         >
           <div className="flex min-h-screen flex-col">
-            <header className="border-b">
+            <header className="sticky top-0 z-50 border-b bg-background">
               <div className="container flex h-16 items-center justify-between gap-4">
                 <Link
                   href="/"
